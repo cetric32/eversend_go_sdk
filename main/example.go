@@ -10,7 +10,6 @@ import (
 )
 
 func main() {
-
 	err := godotenv.Load()
 
 	if err != nil {
@@ -22,5 +21,13 @@ func main() {
 
 	eversendApp := eversendSdk.NewEversendApp(clientId, clientSecret)
 
-	fmt.Println(eversendApp.CreateExchangeQuotation("UGX", 1000, "USD"))
+	quotation, error := eversendApp.CreatePayoutQuotation("UGX", 5000, "momo", "KE", "KES", "DESTINATION")
+
+	fmt.Println(quotation, error)
+
+	token := quotation["token"].(string)
+
+	transaction, error := eversendApp.CreateMomoPayout(token, "+254797224768", "cetric", "lihalakha", "KE")
+
+	fmt.Println(transaction, error)
 }
