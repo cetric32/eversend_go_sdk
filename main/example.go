@@ -21,13 +21,7 @@ func main() {
 
 	eversendApp := eversendSdk.NewEversendApp(clientId, clientSecret)
 
-	quotation, error := eversendApp.CreatePayoutQuotation("UGX", 5000, "momo", "KE", "KES", "DESTINATION")
+	transaction, err := eversendApp.GetTransaction("BP1801708338760630")
 
-	fmt.Println(quotation, error)
-
-	token := quotation["token"].(string)
-
-	transaction, error := eversendApp.CreateMomoPayout(token, "+254797224768", "cetric", "lihalakha", "KE")
-
-	fmt.Println(transaction, error)
+	fmt.Println(transaction, err)
 }

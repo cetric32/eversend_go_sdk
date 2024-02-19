@@ -5,8 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
-	"net/http"
+
+	"github.com/cetric32/eversend_go_sdk/GoHTTP"
 )
 
 // Eversend struct
@@ -27,27 +27,16 @@ func NewEversendApp(clientId string, clientSecret string) *Eversend {
 }
 
 func (e *Eversend) generateAuthToken() (string, error) {
-	client := &http.Client{}
+	url := e.baseUrl + "auth/token"
 
-	req, err := http.NewRequest("GET", e.baseUrl+"auth/token", nil)
+	goHttp := GoHTTP.NewGoHTTP()
 
-	if err != nil {
-		return "", err
-	}
+	goHttp.AddHeaders(map[string]string{
+		"clientId":     e.clientId,
+		"clientSecret": e.clientSecret,
+	})
 
-	req.Header.Add("clientId", e.clientId)
-	req.Header.Add("clientSecret", e.clientSecret)
-
-	resp, err := client.Do(req)
-
-	if err != nil {
-		return "", err
-	}
-
-	defer resp.Body.Close()
-
-	statusCode := resp.StatusCode
-	body, err := io.ReadAll(resp.Body)
+	body, statusCode, err := goHttp.Get(url)
 
 	if err != nil {
 		return "", err
@@ -69,8 +58,6 @@ func (e *Eversend) generateAuthToken() (string, error) {
 		return "", errors.New(responseData["message"].(string))
 	}
 
-	// fmt.Println("Response Data:", responseData)
-
 	token := responseData["token"].(string)
 
 	e.authToken = token
@@ -80,15 +67,8 @@ func (e *Eversend) generateAuthToken() (string, error) {
 
 // GetWallets function to fetch your eversend wallets and their balances
 func (e *Eversend) GetWallets() ([]interface{}, error) {
-	client := &http.Client{}
-
-	req, err := http.NewRequest("GET", e.baseUrl+"wallets", nil)
-
-	if err != nil {
-		return nil, err
-	}
-
 	token := e.authToken
+	var err error
 
 	if token == "" {
 		token, err = e.generateAuthToken()
@@ -98,18 +78,15 @@ func (e *Eversend) GetWallets() ([]interface{}, error) {
 		}
 	}
 
-	req.Header.Add("Authorization", "Bearer "+token)
+	url := e.baseUrl + "wallets"
 
-	resp, err := client.Do(req)
+	goHttp := GoHTTP.NewGoHTTP()
 
-	if err != nil {
-		return nil, err
-	}
+	goHttp.AddHeaders(map[string]string{
+		"Authorization": "Bearer " + token,
+	})
 
-	defer resp.Body.Close()
-
-	statusCode := resp.StatusCode
-	body, err := io.ReadAll(resp.Body)
+	body, statusCode, err := goHttp.Get(url)
 
 	if err != nil {
 		return nil, err
@@ -130,8 +107,6 @@ func (e *Eversend) GetWallets() ([]interface{}, error) {
 	if statusCode != 200 {
 		return nil, errors.New(responseData["message"].(string))
 	}
-
-	// fmt.Println("Response Data:", responseData)
 
 	data := responseData["data"].([]interface{})
 
@@ -144,16 +119,8 @@ func (e *Eversend) GetWallets() ([]interface{}, error) {
 // The from is the currency you want to convert from e.g "UGX".
 // The to is the currency you want to convert to e.g "KES".
 func (e *Eversend) CreateExchangeQuotation(from string, amount float64, to string) (map[string]interface{}, error) {
-	client := &http.Client{}
-
-	reqBody := []byte(fmt.Sprintf(`{"from": "%s", "amount": %f, "to": "%s"}`, from, amount, to))
-
-	req, err := http.NewRequest("POST", e.baseUrl+"exchanges/quotation", bytes.NewBuffer(reqBody))
-
-	if err != nil {
-		return nil, err
-	}
-
+	url := e.baseUrl + "exchanges/quotation"
+	var err error
 	token := e.authToken
 
 	if token == "" {
@@ -164,19 +131,24 @@ func (e *Eversend) CreateExchangeQuotation(from string, amount float64, to strin
 		}
 	}
 
-	req.Header.Add("Authorization", "Bearer "+token)
-	req.Header.Set("Content-Type", "application/json")
+	goHttp := GoHTTP.NewGoHTTP()
 
-	resp, err := client.Do(req)
+	goHttp.AddHeaders(map[string]string{
+		"Authorization": "Bearer " + token,
+		"Content-Type":  "application/json",
+	})
+
+	reqBody, err := json.Marshal(map[string]interface{}{
+		"from":   from,
+		"amount": amount,
+		"to":     to,
+	})
 
 	if err != nil {
 		return nil, err
 	}
 
-	defer resp.Body.Close()
-
-	statusCode := resp.StatusCode
-	body, err := io.ReadAll(resp.Body)
+	body, statusCode, err := goHttp.Post(url, bytes.NewBuffer(reqBody))
 
 	if err != nil {
 		return nil, err
@@ -197,8 +169,6 @@ func (e *Eversend) CreateExchangeQuotation(from string, amount float64, to strin
 	if statusCode != 200 {
 		return nil, errors.New(responseData["message"].(string))
 	}
-
-	// fmt.Println("Response Data:", responseData)
 
 	data := responseData["data"].(map[string]interface{})
 
@@ -208,15 +178,8 @@ func (e *Eversend) CreateExchangeQuotation(from string, amount float64, to strin
 // CreateExchange function to create an exchange transaction. This is used to convert money from one currency to another.
 // The exchange token is used to identify the transaction. The exchange token is got from the CreateExchangeQuotation function
 func (e *Eversend) CreateExchange(exchangeToken string) (map[string]interface{}, error) {
-	client := &http.Client{}
-
-	reqBody := []byte(fmt.Sprintf(`{"token": "%s"}`, exchangeToken))
-
-	req, err := http.NewRequest("POST", e.baseUrl+"exchanges", bytes.NewBuffer(reqBody))
-
-	if err != nil {
-		return nil, err
-	}
+	url := e.baseUrl + "exchanges"
+	var err error
 
 	token := e.authToken
 
@@ -228,19 +191,16 @@ func (e *Eversend) CreateExchange(exchangeToken string) (map[string]interface{},
 		}
 	}
 
-	req.Header.Add("Authorization", "Bearer "+token)
-	req.Header.Set("Content-Type", "application/json")
+	goHttp := GoHTTP.NewGoHTTP()
 
-	resp, err := client.Do(req)
+	goHttp.AddHeaders(map[string]string{
+		"Authorization": "Bearer " + token,
+		"Content-Type":  "application/json",
+	})
 
-	if err != nil {
-		return nil, err
-	}
+	reqBody := []byte(fmt.Sprintf(`{"token": "%s"}`, exchangeToken))
 
-	defer resp.Body.Close()
-
-	statusCode := resp.StatusCode
-	body, err := io.ReadAll(resp.Body)
+	body, statusCode, err := goHttp.Post(url, bytes.NewBuffer(reqBody))
 
 	if err != nil {
 		return nil, err
@@ -261,8 +221,6 @@ func (e *Eversend) CreateExchange(exchangeToken string) (map[string]interface{},
 	if statusCode != 200 {
 		return nil, errors.New(responseData["message"].(string))
 	}
-
-	fmt.Println("Response Data:", responseData)
 
 	data := responseData["data"].(map[string]interface{})
 
@@ -271,13 +229,8 @@ func (e *Eversend) CreateExchange(exchangeToken string) (map[string]interface{},
 
 // AccountProfile function to get account profile details
 func (e *Eversend) AccountProfile() (map[string]interface{}, error) {
-	client := &http.Client{}
-
-	req, err := http.NewRequest("GET", e.baseUrl+"account", nil)
-
-	if err != nil {
-		return nil, err
-	}
+	url := e.baseUrl + "account"
+	var err error
 
 	token := e.authToken
 
@@ -289,20 +242,14 @@ func (e *Eversend) AccountProfile() (map[string]interface{}, error) {
 		}
 	}
 
-	req.Header.Add("Authorization", "Bearer "+token)
-	req.Header.Set("Content-Type", "application/json")
+	goHttp := GoHTTP.NewGoHTTP()
 
-	resp, err := client.Do(req)
+	goHttp.AddHeaders(map[string]string{
+		"Authorization": "Bearer " + token,
+		"Content-Type":  "application/json",
+	})
 
-	if err != nil {
-		return nil, err
-	}
-
-	defer resp.Body.Close()
-
-	statusCode := resp.StatusCode
-
-	body, err := io.ReadAll(resp.Body)
+	body, statusCode, err := goHttp.Get(url)
 
 	if err != nil {
 		return nil, err
@@ -323,8 +270,6 @@ func (e *Eversend) AccountProfile() (map[string]interface{}, error) {
 	if statusCode != 200 {
 		return nil, errors.New(responseData["message"].(string))
 	}
-
-	// fmt.Println("Response Data:", responseData)
 
 	data := responseData["data"].(map[string]interface{})
 
@@ -333,13 +278,8 @@ func (e *Eversend) AccountProfile() (map[string]interface{}, error) {
 
 // GetDeliveryCountries function to get delivery countries. This are the countries you can send money to currently
 func (e *Eversend) GetDeliveryCountries() ([]interface{}, error) {
-	client := &http.Client{}
-
-	req, err := http.NewRequest("GET", e.baseUrl+"payouts/countries", nil)
-
-	if err != nil {
-		return nil, err
-	}
+	url := e.baseUrl + "payouts/countries"
+	var err error
 
 	token := e.authToken
 
@@ -351,20 +291,14 @@ func (e *Eversend) GetDeliveryCountries() ([]interface{}, error) {
 		}
 	}
 
-	req.Header.Add("Authorization", "Bearer "+token)
-	req.Header.Set("Content-Type", "application/json")
+	goHttp := GoHTTP.NewGoHTTP()
 
-	resp, err := client.Do(req)
+	goHttp.AddHeaders(map[string]string{
+		"Authorization": "Bearer " + token,
+		"Content-Type":  "application/json",
+	})
 
-	if err != nil {
-		return nil, err
-	}
-
-	defer resp.Body.Close()
-
-	statusCode := resp.StatusCode
-
-	body, err := io.ReadAll(resp.Body)
+	body, statusCode, err := goHttp.Get(url)
 
 	if err != nil {
 		return nil, err
@@ -385,8 +319,6 @@ func (e *Eversend) GetDeliveryCountries() ([]interface{}, error) {
 	if statusCode != 200 {
 		return nil, errors.New(responseData["message"].(string))
 	}
-
-	// fmt.Println("Response Data:", responseData)
 
 	data := responseData["data"].(map[string]interface{})
 
@@ -396,13 +328,8 @@ func (e *Eversend) GetDeliveryCountries() ([]interface{}, error) {
 // GetDeliveryBanks function to get delivery banks. This are the banks you can send money to in a specific country.
 // The countryCode is the Alpha-2 country code of the country you want to get the banks for.
 func (e *Eversend) GetDeliveryBanks(countryCode string) ([]interface{}, error) {
-	client := &http.Client{}
-
-	req, err := http.NewRequest("GET", e.baseUrl+"payouts/banks/"+countryCode, nil)
-
-	if err != nil {
-		return nil, err
-	}
+	url := e.baseUrl + "payouts/banks/" + countryCode
+	var err error
 
 	token := e.authToken
 
@@ -414,20 +341,14 @@ func (e *Eversend) GetDeliveryBanks(countryCode string) ([]interface{}, error) {
 		}
 	}
 
-	req.Header.Add("Authorization", "Bearer "+token)
-	req.Header.Set("Content-Type", "application/json")
+	goHttp := GoHTTP.NewGoHTTP()
 
-	resp, err := client.Do(req)
+	goHttp.AddHeaders(map[string]string{
+		"Authorization": "Bearer " + token,
+		"Content-Type":  "application/json",
+	})
 
-	if err != nil {
-		return nil, err
-	}
-
-	defer resp.Body.Close()
-
-	statusCode := resp.StatusCode
-
-	body, err := io.ReadAll(resp.Body)
+	body, statusCode, err := goHttp.Get(url)
 
 	if err != nil {
 		return nil, err
@@ -448,8 +369,6 @@ func (e *Eversend) GetDeliveryBanks(countryCode string) ([]interface{}, error) {
 	if statusCode != 200 {
 		return nil, errors.New(responseData["message"].(string))
 	}
-
-	// fmt.Println("Response Data:", responseData)
 
 	data := responseData["data"].([]interface{})
 
@@ -473,42 +392,30 @@ func (e *Eversend) CreatePayoutQuotation(sourceWallet string, amount float64,
 		return nil, errors.New("amount cannot be negative")
 	}
 
-	client := &http.Client{}
+	url := e.baseUrl + "payouts/quotation"
+	var err error
+
+	token := e.authToken
+
+	if token == "" {
+		token, err = e.generateAuthToken()
+
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	goHttp := GoHTTP.NewGoHTTP()
+
+	goHttp.AddHeaders(map[string]string{
+		"Authorization": "Bearer " + token,
+		"Content-Type":  "application/json",
+	})
 
 	reqBody := []byte(fmt.Sprintf(`{"sourceWallet": "%s", "amount": %f, "type": "%s", "destinationCountry": "%s", "destinationCurrency": "%s", "amountType": "%s"}`,
 		sourceWallet, amount, transactionType, destinationCountry, destinationCurrency, amountType))
 
-	req, err := http.NewRequest("POST", e.baseUrl+"payouts/quotation", bytes.NewBuffer(reqBody))
-
-	if err != nil {
-		return nil, err
-	}
-
-	token := e.authToken
-
-	if token == "" {
-		token, err = e.generateAuthToken()
-
-		if err != nil {
-			return nil, err
-		}
-	}
-
-	req.Header.Add("Authorization", "Bearer "+token)
-	req.Header.Set("Content-Type", "application/json")
-
-	resp, err := client.Do(req)
-
-	if err != nil {
-		return nil, err
-	}
-
-	defer resp.Body.Close()
-
-	println("Response Status Code:", resp.StatusCode)
-
-	statusCode := resp.StatusCode
-	body, err := io.ReadAll(resp.Body)
+	body, statusCode, err := goHttp.Post(url, bytes.NewBuffer(reqBody))
 
 	if err != nil {
 		return nil, err
@@ -530,52 +437,37 @@ func (e *Eversend) CreatePayoutQuotation(sourceWallet string, amount float64,
 		return nil, errors.New(responseData["message"].(string))
 	}
 
-	// fmt.Println("Response Data:", responseData)
-
 	data := responseData["data"].(map[string]interface{})
 
 	return data, nil
 }
 
-// CreatePayout function to create a mobile money(momo) payout transaction. This is used to send money to a specific country.
+// CreatePayout function to create a mobile money(momo) payout transaction. This is used to send money to a mobile money account of the recipient.
 func (e *Eversend) CreateMomoPayout(payoutToken string, phoneNumber string, firstName string, lastName string, countryCode string) (map[string]interface{}, error) {
-	client := &http.Client{}
+	url := e.baseUrl + "payouts"
+	var err error
+
+	token := e.authToken
+
+	if token == "" {
+		token, err = e.generateAuthToken()
+
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	goHttp := GoHTTP.NewGoHTTP()
+
+	goHttp.AddHeaders(map[string]string{
+		"Authorization": "Bearer " + token,
+		"Content-Type":  "application/json",
+	})
 
 	reqBody := []byte(fmt.Sprintf(`{"token": "%s", "phoneNumber": "%s", "firstName": "%s", "lastName": "%s", "country": "%s"}`,
 		payoutToken, phoneNumber, firstName, lastName, countryCode))
 
-	req, err := http.NewRequest("POST", e.baseUrl+"payouts", bytes.NewBuffer(reqBody))
-
-	if err != nil {
-		return nil, err
-	}
-
-	token := e.authToken
-
-	if token == "" {
-		token, err = e.generateAuthToken()
-
-		if err != nil {
-			return nil, err
-		}
-	}
-
-	req.Header.Add("Authorization", "Bearer "+token)
-	req.Header.Set("Content-Type", "application/json")
-
-	resp, err := client.Do(req)
-
-	if err != nil {
-
-		return nil, err
-
-	}
-
-	defer resp.Body.Close()
-
-	statusCode := resp.StatusCode
-
-	body, err := io.ReadAll(resp.Body)
+	body, statusCode, err := goHttp.Post(url, bytes.NewBuffer(reqBody))
 
 	if err != nil {
 		return nil, err
@@ -596,26 +488,17 @@ func (e *Eversend) CreateMomoPayout(payoutToken string, phoneNumber string, firs
 	if statusCode != 200 {
 		return nil, errors.New(responseData["message"].(string))
 	}
-
-	// fmt.Println("Response Data:", responseData)
 
 	data := responseData["data"].(map[string]interface{})
 	return data, nil
 }
 
-// CreateBankPayout function to create a bank payout transaction. This is used to send money to a specific country.
+// CreateBankPayout function to create a bank payout transaction. This is used to send money to a bank account of the recipient.
 func (e *Eversend) CreateBankPayout(payoutToken string, phoneNumber string, firstName string, lastName string,
 	countryCode string, bankName string, bankAccountName string, bankCode string, bankAccountNumber string) (map[string]interface{}, error) {
-	client := &http.Client{}
+	url := e.baseUrl + "payouts"
 
-	reqBody := []byte(fmt.Sprintf(`{"token": "%s", "phoneNumber": "%s", "firstName": "%s", "lastName": "%s", "country": "%s", "bankName": "%s", "bankAccountName": "%s", "bankCode": "%s", "bankAccountNumber": "%s"}`,
-		payoutToken, phoneNumber, firstName, lastName, countryCode, bankName, bankAccountName, bankCode, bankAccountNumber))
-
-	req, err := http.NewRequest("POST", e.baseUrl+"payouts", bytes.NewBuffer(reqBody))
-
-	if err != nil {
-		return nil, err
-	}
+	var err error
 
 	token := e.authToken
 
@@ -627,20 +510,17 @@ func (e *Eversend) CreateBankPayout(payoutToken string, phoneNumber string, firs
 		}
 	}
 
-	req.Header.Add("Authorization", "Bearer "+token)
-	req.Header.Set("Content-Type", "application/json")
+	goHttp := GoHTTP.NewGoHTTP()
 
-	resp, err := client.Do(req)
+	goHttp.AddHeaders(map[string]string{
+		"Authorization": "Bearer " + token,
+		"Content-Type":  "application/json",
+	})
 
-	if err != nil {
-		return nil, err
-	}
+	reqBody := []byte(fmt.Sprintf(`{"token": "%s", "phoneNumber": "%s", "firstName": "%s", "lastName": "%s", "country": "%s", "bankName": "%s", "bankAccountName": "%s", "bankCode": "%s", "bankAccountNumber": "%s"}`,
+		payoutToken, phoneNumber, firstName, lastName, countryCode, bankName, bankAccountName, bankCode, bankAccountNumber))
 
-	defer resp.Body.Close()
-
-	statusCode := resp.StatusCode
-
-	body, err := io.ReadAll(resp.Body)
+	body, statusCode, err := goHttp.Post(url, bytes.NewBuffer(reqBody))
 
 	if err != nil {
 		return nil, err
@@ -662,7 +542,54 @@ func (e *Eversend) CreateBankPayout(payoutToken string, phoneNumber string, firs
 		return nil, errors.New(responseData["message"].(string))
 	}
 
-	// fmt.Println("Response Data:", responseData)
+	data := responseData["data"].(map[string]interface{})
+	return data, nil
+}
+
+// GetTransaction function to get a transaction details.
+// The transactionId is the id of the transaction you want to get details for.
+func (e *Eversend) GetTransaction(transactionId string) (map[string]interface{}, error) {
+	url := e.baseUrl + "transactions/" + transactionId
+	var err error
+
+	token := e.authToken
+
+	if token == "" {
+		token, err = e.generateAuthToken()
+
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	goHttp := GoHTTP.NewGoHTTP()
+
+	goHttp.AddHeaders(map[string]string{
+		"Authorization": "Bearer " + token,
+		"Content-Type":  "application/json",
+	})
+
+	body, statusCode, err := goHttp.Get(url)
+
+	if err != nil {
+		return nil, err
+	}
+
+	var responseData = map[string]interface{}{
+		// "status":  200,
+		"data":    map[string]interface{}{},
+		"message": "",
+	}
+
+	err = json.Unmarshal(body, &responseData)
+
+	if err != nil {
+		return nil, err
+	}
+
+	if statusCode != 200 {
+		return nil, errors.New(responseData["message"].(string))
+	}
 
 	data := responseData["data"].(map[string]interface{})
 	return data, nil
