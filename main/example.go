@@ -23,7 +23,7 @@ func main() {
 
 	// transaction, err := eversendApp.GetTransaction("BP1801706452633548")
 
-	beneficiaries, err := eversendApp.Wallet.GetWallet("UGX")
+	beneficiaries, err := eversendApp.Wallets.Wallet("UGX")
 
 	fmt.Println(beneficiaries, err)
 }
