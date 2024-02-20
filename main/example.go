@@ -21,7 +21,9 @@ func main() {
 
 	eversendApp := eversendSdk.NewEversendApp(clientId, clientSecret)
 
-	transaction, err := eversendApp.GetTransaction("BP1801708338760630")
+	// transaction, err := eversendApp.GetTransaction("BP1801708338760630")
 
-	fmt.Println(transaction, err)
+	beneficiaries, err := eversendApp.Crypto.GetAddresses()
+
+	fmt.Println(beneficiaries, err)
 }

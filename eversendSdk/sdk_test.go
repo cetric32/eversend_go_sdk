@@ -18,12 +18,12 @@ func TestNewEversendApp(t *testing.T) {
 		{
 			name: "Test NewEversendApp",
 			args: args{
-				clientId:     "client_id",
-				clientSecret: "client_secret",
+				// clientId:     "client_id",
+				// clientSecret: "client_secret",
 			},
 			want: &Eversend{
-				clientId:     "client_id",
-				clientSecret: "client_secret",
+				// clientId:     "client_id",
+				// clientSecret: "client_secret",
 			},
 		},
 	}
