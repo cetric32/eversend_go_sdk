@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"sync"
+	"time"
 
 	"github.com/cetric32/eversend_go_sdk/GoHTTP"
 )
@@ -14,7 +15,8 @@ var eversendClientId string
 var eversendClientSecret string
 var baseUrl string = "https://api.eversend.co/v1/"
 var authToken string
-var mutex = &sync.Mutex{}
+var mutex = &sync.RWMutex{}
+var authTokenExpires time.Time
 
 // Eversend struct
 type eversend struct {
@@ -48,13 +50,28 @@ func NewEversendApp(clientId string, clientSecret string) *eversend {
 }
 
 func generateAuthToken() (string, error) {
+	//current time now UTC
+	currentTime := time.Now()
+
+	mutex.RLock()
+	clientId := eversendClientId
+	clientSecret := eversendClientSecret
+	currentToken := authToken
+	currentTokenExpires := authTokenExpires
+	mutex.RUnlock()
+
+	if currentToken != "" && currentTokenExpires.After(currentTime) {
+		fmt.Println("existing token", currentToken, "expires", currentTokenExpires, "currentTime", currentTime)
+		return currentToken, nil
+	}
+
 	url := baseUrl + "auth/token"
 
 	goHttp := GoHTTP.NewGoHTTP()
 
 	goHttp.AddHeaders(map[string]string{
-		"clientId":     eversendClientId,
-		"clientSecret": eversendClientSecret,
+		"clientId":     clientId,
+		"clientSecret": clientSecret,
 	})
 
 	body, statusCode, err := goHttp.Get(url)
@@ -76,27 +93,27 @@ func generateAuthToken() (string, error) {
 	}
 
 	token := responseData["token"].(string)
-
-	// fmt.Println("responseData", responseData)
+	expires := responseData["expires"].(string)
 
 	mutex.Lock()
 	defer mutex.Unlock()
 	authToken = token
+	authTokenExpires, err = time.Parse(time.RFC3339, expires)
 
+	if err != nil {
+		fmt.Println("error parsing expires", expires, err)
+	}
+
+	fmt.Println("new token", authToken, "expires", authTokenExpires, "currentTime", currentTime)
 	return token, nil
 }
 
-// Wallets function to fetch your eversend wallets and their balances
-func (e *wallet) Wallets() ([]interface{}, error) {
-	token := authToken
-	var err error
+// List function to fetch your eversend wallets and their balances
+func (e *wallet) List() ([]interface{}, error) {
+	token, err := generateAuthToken()
 
-	if token == "" {
-		token, err = generateAuthToken()
-
-		if err != nil {
-			return nil, err
-		}
+	if err != nil {
+		return nil, err
 	}
 
 	url := baseUrl + "wallets"
@@ -130,18 +147,13 @@ func (e *wallet) Wallets() ([]interface{}, error) {
 	return data, nil
 }
 
-// Wallet function to fetch a specific wallet and its balance
+// Find function to fetch a specific wallet and its balance
 // The walletCurrency is the currency of the wallet you want to get e.g "UGX"
-func (e *wallet) Wallet(walletCurrency string) (map[string]interface{}, error) {
-	token := authToken
-	var err error
+func (e *wallet) Find(walletCurrency string) (map[string]interface{}, error) {
+	token, err := generateAuthToken()
 
-	if token == "" {
-		token, err = generateAuthToken()
-
-		if err != nil {
-			return nil, err
-		}
+	if err != nil {
+		return nil, err
 	}
 
 	url := baseUrl + "wallets/" + walletCurrency
@@ -182,15 +194,10 @@ func (e *wallet) Wallet(walletCurrency string) (map[string]interface{}, error) {
 // The to is the currency you want to convert to e.g "KES".
 func (e *exchange) Quotation(from string, amount float64, to string) (map[string]interface{}, error) {
 	url := baseUrl + "exchanges/quotation"
-	var err error
-	token := authToken
+	token, err := generateAuthToken()
 
-	if token == "" {
-		token, err = generateAuthToken()
-
-		if err != nil {
-			return nil, err
-		}
+	if err != nil {
+		return nil, err
 	}
 
 	goHttp := GoHTTP.NewGoHTTP()
@@ -237,16 +244,10 @@ func (e *exchange) Quotation(from string, amount float64, to string) (map[string
 // The exchange token is used to identify the transaction. The exchange token is got from the CreateExchangeQuotation function
 func (e *exchange) Exchange(exchangeToken string) (map[string]interface{}, error) {
 	url := baseUrl + "exchanges"
-	var err error
+	token, err := generateAuthToken()
 
-	token := authToken
-
-	if token == "" {
-		token, err = generateAuthToken()
-
-		if err != nil {
-			return nil, err
-		}
+	if err != nil {
+		return nil, err
 	}
 
 	goHttp := GoHTTP.NewGoHTTP()
@@ -284,16 +285,10 @@ func (e *exchange) Exchange(exchangeToken string) (map[string]interface{}, error
 // AccountProfile function to get account profile details
 func (e *eversend) AccountProfile() (map[string]interface{}, error) {
 	url := baseUrl + "account"
-	var err error
+	token, err := generateAuthToken()
 
-	token := authToken
-
-	if token == "" {
-		token, err = generateAuthToken()
-
-		if err != nil {
-			return nil, err
-		}
+	if err != nil {
+		return nil, err
 	}
 
 	goHttp := GoHTTP.NewGoHTTP()
@@ -329,16 +324,10 @@ func (e *eversend) AccountProfile() (map[string]interface{}, error) {
 // DeliveryCountries function to get delivery countries. This are the countries you can send money to currently
 func (e *payout) DeliveryCountries() ([]interface{}, error) {
 	url := baseUrl + "payouts/countries"
-	var err error
+	token, err := generateAuthToken()
 
-	token := authToken
-
-	if token == "" {
-		token, err = generateAuthToken()
-
-		if err != nil {
-			return nil, err
-		}
+	if err != nil {
+		return nil, err
 	}
 
 	goHttp := GoHTTP.NewGoHTTP()
@@ -375,16 +364,10 @@ func (e *payout) DeliveryCountries() ([]interface{}, error) {
 // The countryCode is the Alpha-2 country code of the country you want to get the banks for.
 func (e *payout) DeliveryBanks(countryCode string) ([]interface{}, error) {
 	url := baseUrl + "payouts/banks/" + countryCode
-	var err error
+	token, err := generateAuthToken()
 
-	token := authToken
-
-	if token == "" {
-		token, err = generateAuthToken()
-
-		if err != nil {
-			return nil, err
-		}
+	if err != nil {
+		return nil, err
 	}
 
 	goHttp := GoHTTP.NewGoHTTP()
@@ -435,16 +418,10 @@ func (e *payout) Quotation(sourceWallet string, amount float64,
 	}
 
 	url := baseUrl + "payouts/quotation"
-	var err error
+	token, err := generateAuthToken()
 
-	token := authToken
-
-	if token == "" {
-		token, err = generateAuthToken()
-
-		if err != nil {
-			return nil, err
-		}
+	if err != nil {
+		return nil, err
 	}
 
 	goHttp := GoHTTP.NewGoHTTP()
@@ -483,16 +460,10 @@ func (e *payout) Quotation(sourceWallet string, amount float64,
 // MomoPayout function to create a mobile money(momo) payout transaction. This is used to send money to a mobile money account of the recipient.
 func (e *payout) MomoPayout(payoutToken string, phoneNumber string, firstName string, lastName string, countryCode string) (map[string]interface{}, error) {
 	url := baseUrl + "payouts"
-	var err error
+	token, err := generateAuthToken()
 
-	token := authToken
-
-	if token == "" {
-		token, err = generateAuthToken()
-
-		if err != nil {
-			return nil, err
-		}
+	if err != nil {
+		return nil, err
 	}
 
 	goHttp := GoHTTP.NewGoHTTP()
@@ -532,16 +503,10 @@ func (e *payout) BankPayout(payoutToken string, phoneNumber string, firstName st
 	countryCode string, bankName string, bankAccountName string, bankCode string, bankAccountNumber string) (map[string]interface{}, error) {
 	url := baseUrl + "payouts"
 
-	var err error
+	token, err := generateAuthToken()
 
-	token := authToken
-
-	if token == "" {
-		token, err = generateAuthToken()
-
-		if err != nil {
-			return nil, err
-		}
+	if err != nil {
+		return nil, err
 	}
 
 	goHttp := GoHTTP.NewGoHTTP()
@@ -580,16 +545,10 @@ func (e *payout) BankPayout(payoutToken string, phoneNumber string, firstName st
 // The transactionId is the id of the transaction you want to get details for.
 func (e *payout) Transaction(transactionId string) (map[string]interface{}, error) {
 	url := baseUrl + "transactions/" + transactionId
-	var err error
+	token, err := generateAuthToken()
 
-	token := authToken
-
-	if token == "" {
-		token, err = generateAuthToken()
-
-		if err != nil {
-			return nil, err
-		}
+	if err != nil {
+		return nil, err
 	}
 
 	goHttp := GoHTTP.NewGoHTTP()
@@ -626,16 +585,10 @@ func (e *payout) Transaction(transactionId string) (map[string]interface{}, erro
 func (e *beneficiary) CreateMomoBeneficiary(firstName string, lastname string, countryCode string, phoneNumber string) error {
 	url := baseUrl + "beneficiaries"
 
-	var err error
+	token, err := generateAuthToken()
 
-	token := authToken
-
-	if token == "" {
-		token, err = generateAuthToken()
-
-		if err != nil {
-			return err
-		}
+	if err != nil {
+		return err
 	}
 
 	goHttp := GoHTTP.NewGoHTTP()
@@ -676,16 +629,10 @@ func (e *beneficiary) CreateBankBeneficiary(firstName string, lastname string, c
 	bankAccountName string, bankCode string, bankAccountNumber string) error {
 	url := baseUrl + "beneficiaries"
 
-	var err error
+	token, err := generateAuthToken()
 
-	token := authToken
-
-	if token == "" {
-		token, err = generateAuthToken()
-
-		if err != nil {
-			return err
-		}
+	if err != nil {
+		return err
 	}
 
 	goHttp := GoHTTP.NewGoHTTP()
@@ -719,19 +666,13 @@ func (e *beneficiary) CreateBankBeneficiary(firstName string, lastname string, c
 	return nil
 }
 
-// Beneficiaries function to get a list of beneficiaries. This is used to get the beneficiaries you have saved.
-func (e *beneficiary) Beneficiaries() ([]interface{}, error) {
+// List function to get a list of beneficiaries. This is used to get the beneficiaries you have saved.
+func (e *beneficiary) List() ([]interface{}, error) {
 	url := baseUrl + "beneficiaries"
-	var err error
+	token, err := generateAuthToken()
 
-	token := authToken
-
-	if token == "" {
-		token, err = generateAuthToken()
-
-		if err != nil {
-			return nil, err
-		}
+	if err != nil {
+		return nil, err
 	}
 
 	goHttp := GoHTTP.NewGoHTTP()
@@ -766,19 +707,13 @@ func (e *beneficiary) Beneficiaries() ([]interface{}, error) {
 	return beneficiaries, nil
 }
 
-// Beneficiary function to get a beneficiary details. This is used to get the details of a specific beneficiary.
-func (e *beneficiary) Beneficiary(beneficiaryId string) (map[string]interface{}, error) {
+// Find function to get a beneficiary details. This is used to get the details of a specific beneficiary.
+func (e *beneficiary) Find(beneficiaryId string) (map[string]interface{}, error) {
 	url := baseUrl + "beneficiaries/" + beneficiaryId
-	var err error
+	token, err := generateAuthToken()
 
-	token := authToken
-
-	if token == "" {
-		token, err = generateAuthToken()
-
-		if err != nil {
-			return nil, err
-		}
+	if err != nil {
+		return nil, err
 	}
 
 	goHttp := GoHTTP.NewGoHTTP()
@@ -816,16 +751,10 @@ func (e *beneficiary) Beneficiary(beneficiaryId string) (map[string]interface{},
 func (e *crypto) AssetChains(coin string) (map[string]interface{}, error) {
 	url := baseUrl + "crypto/assets/" + coin
 
-	var err error
+	token, err := generateAuthToken()
 
-	token := authToken
-
-	if token == "" {
-		token, err = generateAuthToken()
-
-		if err != nil {
-			return nil, err
-		}
+	if err != nil {
+		return nil, err
 	}
 
 	goHttp := GoHTTP.NewGoHTTP()
@@ -860,16 +789,10 @@ func (e *crypto) AssetChains(coin string) (map[string]interface{}, error) {
 func (e *crypto) Addresses() (map[string]interface{}, error) {
 	url := baseUrl + "crypto/addresses"
 
-	var err error
+	token, err := generateAuthToken()
 
-	token := authToken
-
-	if token == "" {
-		token, err = generateAuthToken()
-
-		if err != nil {
-			return nil, err
-		}
+	if err != nil {
+		return nil, err
 	}
 
 	goHttp := GoHTTP.NewGoHTTP()
@@ -904,16 +827,10 @@ func (e *crypto) Addresses() (map[string]interface{}, error) {
 func (e *crypto) Transactions() (map[string]interface{}, error) {
 	url := baseUrl + "crypto/transactions"
 
-	var err error
+	token, err := generateAuthToken()
 
-	token := authToken
-
-	if token == "" {
-		token, err = generateAuthToken()
-
-		if err != nil {
-			return nil, err
-		}
+	if err != nil {
+		return nil, err
 	}
 
 	goHttp := GoHTTP.NewGoHTTP()
@@ -949,16 +866,10 @@ func (e *crypto) Transactions() (map[string]interface{}, error) {
 func (e *crypto) AddressTransactions(cryptoCoinAddress string) (map[string]interface{}, error) {
 	url := baseUrl + "crypto/addresses/" + cryptoCoinAddress + "/transactions"
 
-	var err error
+	token, err := generateAuthToken()
 
-	token := authToken
-
-	if token == "" {
-		token, err = generateAuthToken()
-
-		if err != nil {
-			return nil, err
-		}
+	if err != nil {
+		return nil, err
 	}
 
 	goHttp := GoHTTP.NewGoHTTP()
@@ -997,18 +908,11 @@ func (e *crypto) AddressTransactions(cryptoCoinAddress string) (map[string]inter
 func (e *crypto) CreateAddress(assetId string, ownerName string, destinationAddressDescription string, purpose string) (map[string]interface{}, error) {
 	url := baseUrl + "crypto/addresses"
 
-	var err error
+	token, err := generateAuthToken()
 
-	token := authToken
-
-	if token == "" {
-		token, err = generateAuthToken()
-
-		if err != nil {
-			return nil, err
-		}
+	if err != nil {
+		return nil, err
 	}
-
 	reqBody := []byte(fmt.Sprintf(`{"assetId": "%s", "ownerName": "%s", "destinationAddressDescription": "%s", "purpose": "%s"}`,
 		assetId, ownerName, destinationAddressDescription, purpose))
 

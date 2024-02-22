@@ -21,9 +21,14 @@ func main() {
 
 	eversendApp := eversendSdk.NewEversendApp(clientId, clientSecret)
 
-	// transaction, err := eversendApp.GetTransaction("BP1801706452633548")
+	wallets, err := eversendApp.Wallets.List()
 
-	beneficiaries, err := eversendApp.Wallets.Wallet("UGX")
+	fmt.Println(wallets, err)
 
-	fmt.Println(beneficiaries, err)
+	// transaction, err := eversendApp.Payouts.Transaction("BP1801706452633548")
+	transaction, err := eversendApp.Payouts.Quotation("UGX", 200, "momo", "KE", "KES", "SOURCE")
+
+	// beneficiaries, err := eversendApp.Crypto.AddressTransactions("")
+
+	fmt.Println(transaction, err)
 }
