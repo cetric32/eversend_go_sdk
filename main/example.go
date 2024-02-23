@@ -5,7 +5,7 @@ import (
 	"log"
 	"os"
 
-	"github.com/cetric32/eversend_go_sdk/eversendSdk"
+	eversendSdk "github.com/cetric32/eversend_go_sdk"
 	"github.com/joho/godotenv"
 )
 
