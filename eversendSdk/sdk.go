@@ -19,7 +19,7 @@ var mutex = &sync.RWMutex{}
 var authTokenExpires time.Time
 
 // Eversend struct
-type eversend struct {
+type Eversend struct {
 	// clientId     string
 	// clientSecret string
 	// baseUrl      string
@@ -39,14 +39,14 @@ type payout struct{}
 type beneficiary struct{}
 
 // NewEversend function to create a new Eversend instance
-func NewEversendApp(clientId string, clientSecret string) *eversend {
+func NewEversendApp(clientId string, clientSecret string) *Eversend {
 	mutex.Lock()
 	defer mutex.Unlock()
 
 	eversendClientId = clientId
 	eversendClientSecret = clientSecret
 
-	return &eversend{}
+	return &Eversend{}
 }
 
 func generateAuthToken() (string, error) {
@@ -283,7 +283,7 @@ func (e *exchange) Exchange(exchangeToken string) (map[string]interface{}, error
 }
 
 // AccountProfile function to get account profile details
-func (e *eversend) AccountProfile() (map[string]interface{}, error) {
+func (e *Eversend) AccountProfile() (map[string]interface{}, error) {
 	url := baseUrl + "account"
 	token, err := generateAuthToken()
 
